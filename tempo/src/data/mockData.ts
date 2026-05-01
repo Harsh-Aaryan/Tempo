@@ -114,6 +114,7 @@ export const MOCK_USER: User = {
   quietStart: '23:00',
   quietEnd: '07:00',
   travelBufferMinutes: 30,
+  travelAwareRemindersEnabled: true,
 };
 
 export const MOCK_NOTIFICATIONS: Notification[] = [

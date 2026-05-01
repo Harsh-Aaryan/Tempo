@@ -15,6 +15,7 @@ export const EXAMPLE_ACCOUNT_PROFILE = {
   quietStart: '23:00',
   quietEnd: '06:00',
   travelBufferMinutes: 20,
+  travelAwareRemindersEnabled: true,
 } as const
 
 type EventSeedSpec = {

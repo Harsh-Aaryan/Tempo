@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { User, Clock, Bell, Shield, Save } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
+import { ensureNotificationPermission } from '../lib/travelReminders'
+import { locationService } from '../lib/locationService'
 
 const TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -66,7 +68,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
 }
 
 export default function SettingsPage() {
-  const { user } = useAppStore()
+  const { user, updateUserProfile } = useAppStore()
   const [form, setForm] = useState({
     displayName: user.displayName,
     email: user.email,
@@ -81,10 +83,22 @@ export default function SettingsPage() {
     conflictAlerts: true,
     weeklyInsights: true,
     darkMode: true,
+    travelAwareReminders: user.travelAwareRemindersEnabled,
   })
   const [saved, setSaved] = useState(false)
 
   function handleSave() {
+    updateUserProfile({
+      displayName: form.displayName,
+      email: form.email,
+      timezone: form.timezone,
+      workdayStart: form.workdayStart,
+      workdayEnd: form.workdayEnd,
+      quietStart: form.quietStart,
+      quietEnd: form.quietEnd,
+      travelBufferMinutes: form.travelBuffer,
+      travelAwareRemindersEnabled: form.travelAwareReminders,
+    })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -172,6 +186,24 @@ export default function SettingsPage() {
           </FieldRow>
           <FieldRow label="Weekly Insights" description="Monday morning productivity summary">
             <Toggle checked={form.weeklyInsights} onChange={(v) => setForm((f) => ({ ...f, weeklyInsights: v }))} />
+          </FieldRow>
+          <FieldRow
+            label="Travel-aware reminders"
+            description="Notify earlier when a meeting is far away — uses your live location"
+          >
+            <Toggle
+              checked={form.travelAwareReminders}
+              onChange={(v) => {
+                setForm((f) => ({ ...f, travelAwareReminders: v }))
+                if (v) {
+                  // Request permissions when the user turns this on
+                  ensureNotificationPermission()
+                  locationService.getCurrentLocation().catch(() => {
+                    // Permission prompt shown; ignore error here
+                  })
+                }
+              }}
+            />
           </FieldRow>
         </Section>
 

@@ -5,6 +5,7 @@ import { MOCK_EVENTS, MOCK_NOTIFICATIONS, MOCK_USER } from '../data/mockData';
 import { EXAMPLE_ACCOUNT, EXAMPLE_ACCOUNT_EVENTS, EXAMPLE_ACCOUNT_NOTIFICATIONS } from '../data/exampleAccountSeed';
 import { detectConflict, resolveConflict } from '../lib/scheduling';
 import { getCurrentAuthUser, type AuthUser } from '../services/authService';
+import { resetTravelReminderState } from '../lib/travelReminders';
 
 interface UserScopedState {
   events: CalendarEvent[];
@@ -97,6 +98,7 @@ function buildStoreUser(authUser: AuthUser | null): User {
     quietStart: authUser?.profile?.quietStart ?? MOCK_USER.quietStart,
     quietEnd: authUser?.profile?.quietEnd ?? MOCK_USER.quietEnd,
     travelBufferMinutes: authUser?.profile?.travelBufferMinutes ?? MOCK_USER.travelBufferMinutes,
+    travelAwareRemindersEnabled: authUser?.profile?.travelAwareRemindersEnabled ?? MOCK_USER.travelAwareRemindersEnabled,
   };
 }
 
@@ -171,6 +173,7 @@ function readScopedState(authUser: AuthUser | null): UserScopedState {
             quietStart: persistedUser.quietStart ?? authUserProfile.quietStart,
             quietEnd: persistedUser.quietEnd ?? authUserProfile.quietEnd,
             travelBufferMinutes: persistedUser.travelBufferMinutes ?? authUserProfile.travelBufferMinutes,
+            travelAwareRemindersEnabled: persistedUser.travelAwareRemindersEnabled ?? authUserProfile.travelAwareRemindersEnabled,
           }
         : authUserProfile,
     };
@@ -269,6 +272,9 @@ export const useAppStore = create<AppState>()(
         isDarkMode: true,
 
         switchAuthUser: (authUser) => {
+          // Fix 3: clear module-level travel reminder state so stale data from the
+          // previous user session is not carried over to the new session
+          resetTravelReminderState()
           const scoped = readScopedState(authUser);
           const email = normalizeEmail(authUser?.email);
           eventCounter = scoped.events.length + 1;
