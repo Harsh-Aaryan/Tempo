@@ -17,6 +17,7 @@ export interface AuthUserProfile {
   quietStart: string
   quietEnd: string
   travelBufferMinutes: number
+  travelAwareRemindersEnabled?: boolean
 }
 
 const USERS_KEY = 'tempo-auth-users'
