@@ -46,6 +46,7 @@ export interface User {
   quietStart: string;
   quietEnd: string;
   travelBufferMinutes: number;
+  travelAwareRemindersEnabled: boolean;
 }
 
 export interface RescheduleOption {

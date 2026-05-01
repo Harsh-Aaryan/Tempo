@@ -97,6 +97,7 @@ function buildStoreUser(authUser: AuthUser | null): User {
     quietStart: authUser?.profile?.quietStart ?? MOCK_USER.quietStart,
     quietEnd: authUser?.profile?.quietEnd ?? MOCK_USER.quietEnd,
     travelBufferMinutes: authUser?.profile?.travelBufferMinutes ?? MOCK_USER.travelBufferMinutes,
+    travelAwareRemindersEnabled: authUser?.profile?.travelAwareRemindersEnabled ?? MOCK_USER.travelAwareRemindersEnabled,
   };
 }
 
@@ -171,6 +172,7 @@ function readScopedState(authUser: AuthUser | null): UserScopedState {
             quietStart: persistedUser.quietStart ?? authUserProfile.quietStart,
             quietEnd: persistedUser.quietEnd ?? authUserProfile.quietEnd,
             travelBufferMinutes: persistedUser.travelBufferMinutes ?? authUserProfile.travelBufferMinutes,
+            travelAwareRemindersEnabled: persistedUser.travelAwareRemindersEnabled ?? authUserProfile.travelAwareRemindersEnabled,
           }
         : authUserProfile,
     };
