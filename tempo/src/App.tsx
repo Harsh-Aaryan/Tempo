@@ -13,6 +13,7 @@ import ProfilePage from './pages/ProfilePage'
 import OnboardingPage from './pages/OnboardingPage'
 import { getCurrentAuthUser, isOnboardingPending } from './services/authService'
 import { useAppStore } from './stores/appStore'
+import { startTravelReminderLoop } from './lib/travelReminders'
 import './App.css'
 
 function GuestOnly({ children }: { children: ReactNode }) {
@@ -34,6 +35,10 @@ export default function App() {
   useEffect(() => {
     switchAuthUser(getCurrentAuthUser())
   }, [switchAuthUser])
+
+  useEffect(() => {
+    return startTravelReminderLoop()
+  }, [])
 
   return (
     <BrowserRouter>
