@@ -1,10 +1,14 @@
 import { locationService, type LocationCoordinates } from './locationService'
 import { getTravelTimeMinutes } from './routingService'
 import { useAppStore } from '../stores/appStore'
+import { getCurrentAuthUser } from '../services/authService'
 import type { CalendarEvent } from '../types'
 
-// --- GPS cache (2-minute TTL) ---
-// Avoids re-prompting the user or hammering GPS on every 60-second tick
+// --- Module-level state ---
+// Fix 1: moved geolocationDeniedNotified to top alongside other state vars to avoid TDZ
+// Fix 3: all three vars are reset by resetTravelReminderState() on user switch
+
+// GPS cache (2-minute TTL) — avoids re-prompting or hammering GPS on every 60-second tick
 interface CachedLocation {
   coords: LocationCoordinates
   expiresAt: number
@@ -12,6 +16,33 @@ interface CachedLocation {
 let locationCache: CachedLocation | null = null
 const LOCATION_CACHE_TTL_MS = 120_000
 
+// Already-notified tracking: eventId → startUtc at notification time
+// Prevents re-firing the same notification within a session
+// If startUtc changes (event rescheduled), the entry is invalidated
+const notified = new Map<string, string>() // eventId → startUtc
+
+// Fix 1 (TDZ): declaration moved here from bottom of file
+let geolocationDeniedNotified = false
+
+// Fix 4: per-event ORS cooldown to avoid burning quota on multiple events per tick
+// Key: eventId, Value: timestamp of last successful routing fetch
+const lastRoutingFetch = new Map<string, number>()
+const ROUTING_COOLDOWN_MS = 5 * 60_000 // 5 minutes
+
+// --- State reset (Fix 3) ---
+/**
+ * Clears all module-level session state. Call this whenever the authenticated
+ * user changes so that stale notifications/cache from the previous session are
+ * not carried over to the new session.
+ */
+export function resetTravelReminderState(): void {
+  notified.clear()
+  locationCache = null
+  geolocationDeniedNotified = false
+  lastRoutingFetch.clear()
+}
+
+// --- GPS cache helper ---
 async function getCachedLocation(): Promise<LocationCoordinates> {
   if (locationCache && Date.now() < locationCache.expiresAt) {
     return locationCache.coords
@@ -21,12 +52,7 @@ async function getCachedLocation(): Promise<LocationCoordinates> {
   return coords
 }
 
-// --- Already-notified tracking ---
-// Map of eventId → startUtc at the time notification was sent
-// Prevents re-firing the same notification within a session
-// If startUtc changes (event rescheduled), the entry is invalidated
-const notified = new Map<string, string>() // eventId → startUtc
-
+// --- Already-notified helpers ---
 function isAlreadyNotified(event: CalendarEvent): boolean {
   return notified.get(event.id) === event.startUtc
 }
@@ -55,6 +81,9 @@ export async function ensureNotificationPermission(): Promise<NotificationPermis
 
 // --- Main tick ---
 async function tick(): Promise<void> {
+  // Fix 2: bail early if no authenticated user to avoid running against mock/guest state
+  if (!getCurrentAuthUser()) return
+
   const { events, user, addNotification } = useAppStore.getState()
 
   if (!user.travelAwareRemindersEnabled) return
@@ -93,11 +122,15 @@ async function tick(): Promise<void> {
       return  // stop the tick entirely; will retry next interval
     }
 
+    // Fix 5: extract non-null coords into local variables instead of using ! assertions inline
+    const eventLat = event.locationLat!
+    const eventLng = event.locationLng!
+
     const distanceKm = locationService.calculateDistance(
       userCoords.latitude,
       userCoords.longitude,
-      event.locationLat!,
-      event.locationLng!
+      eventLat,
+      eventLng
     )
 
     // Already there — suppress notification
@@ -108,16 +141,24 @@ async function tick(): Promise<void> {
 
     const mode = pickMode(distanceKm)
 
+    // Fix 4: per-event ORS cooldown — use haversine estimate when inside cooldown window
     let travelMinutes: number
-    try {
-      travelMinutes = await getTravelTimeMinutes(
-        userCoords,
-        { lat: event.locationLat!, lng: event.locationLng! },
-        mode
-      )
-    } catch {
-      console.warn('[travelReminders] Routing API failed, using haversine fallback')
+    const lastFetch = lastRoutingFetch.get(event.id)
+    if (lastFetch && Date.now() - lastFetch < ROUTING_COOLDOWN_MS) {
+      // Still within cooldown — use haversine estimate to avoid burning ORS quota
       travelMinutes = estimateMinutes(distanceKm, mode)
+    } else {
+      try {
+        travelMinutes = await getTravelTimeMinutes(
+          userCoords,
+          { lat: eventLat, lng: eventLng },
+          mode
+        )
+        lastRoutingFetch.set(event.id, Date.now())
+      } catch {
+        console.warn('[travelReminders] Routing API failed, using haversine fallback')
+        travelMinutes = estimateMinutes(distanceKm, mode)
+      }
     }
 
     const leaveTimeMs =
@@ -153,8 +194,6 @@ async function tick(): Promise<void> {
     }
   }
 }
-
-let geolocationDeniedNotified = false
 
 // --- Public API ---
 
